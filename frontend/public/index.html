@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP O2C Graph Explorer</title>
+
+<script src="/data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+
+
+body{background:#f0f2f5;display:flex;flex-direction:column}
+.topbar{height:48px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;z-index:10;min-width:0}
+.topbar-breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:#6b7280;white-space:nowrap}
+.topbar-breadcrumb .sep{color:#d1d5db}
+.topbar-breadcrumb .cur{color:#111827;font-weight:600}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.tstat{font-size:12px;color:#6b7280;background:#f9fafb;padding:3px 10px;border-radius:20px;border:1px solid #e5e7eb;white-space:nowrap}
+.tstat strong{color:#111827}
+.ingest-btn{padding:5px 14px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s;white-space:nowrap;flex-shrink:0}
+.ingest-btn:hover{background:#1e40af}
+.ingest-btn:disabled{opacity:.5;cursor:not-allowed}
+
+.workspace{display:flex;flex:1;overflow:hidden;min-height:0}
+
+.sidebar{width:200px;min-width:200px;background:#fff;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.sidebar-title{padding:12px 14px 8px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #f3f4f6;flex-shrink:0}
+.ent-list{flex:1;overflow-y:auto;padding:6px;min-height:0}
+.ent-btn{width:100%;text-align:left;padding:7px 10px;border-radius:7px;border:1px solid transparent;background:transparent;color:#374151;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:2px;transition:all .12s}
+.ent-btn:hover{background:#f9fafb;border-color:#e5e7eb}
+.ent-btn.active{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+.ent-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ent-count{margin-left:auto;font-size:10px;color:#9ca3af;background:#f3f4f6;padding:1px 6px;border-radius:10px}
+.ent-btn.active .ent-count{background:#dbeafe;color:#1d4ed8}
+.sdivider{height:1px;background:#f3f4f6;margin:4px 6px}
+
+.graph-area{flex:1;position:relative;background:#fff;min-width:0;overflow:hidden}
+#graph-svg{position:absolute;top:0;left:0;width:100%;height:100%;cursor:grab}
+#graph-svg:active{cursor:grabbing}
+.gtoolbar{position:absolute;top:12px;left:12px;display:flex;gap:6px;z-index:5}
+.gtb-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid #d1d5db;background:rgba(255,255,255,.96);color:#374151;cursor:pointer;font-size:12px;font-weight:500;transition:all .12s;box-shadow:0 1px 4px rgba(0,0,0,.07);white-space:nowrap}
+.gtb-btn:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.gctr{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:5}
+.ctrl-btn{width:30px;height:30px;border-radius:6px;border:1px solid #e5e7eb;background:rgba(255,255,255,.96);color:#374151;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .12s;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.ctrl-btn:hover{border-color:#9ca3af;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+
+.search-wrap{position:absolute;bottom:50px;left:12px;z-index:10}
+.search-wrap input{padding:7px 12px;border-radius:8px;border:1px solid #e5e7eb;background:rgba(255,255,255,.97);color:#111827;font-size:12.5px;width:210px;outline:none;box-shadow:0 1px 3px rgba(0,0,0,.07);display:block}
+.search-wrap input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.search-wrap input::placeholder{color:#9ca3af}
+.search-label{font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+
+.glegend{position:absolute;bottom:12px;right:12px;background:rgba(255,255,255,.97);border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;z-index:5;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.glegend-title{font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px}
+.litem{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#4b5563}
+.ldot{width:8px;height:8px;border-radius:50%}
+
+
+#node-card{position:absolute;top:60px;left:12px;pointer-events:all;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;min-width:260px;max-width:300px;z-index:20;display:none;box-shadow:0 4px 24px rgba(0,0,0,.13);font-size:12.5px;max-height:calc(100% - 80px);overflow-y:auto}
+#node-card .card-type{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.type-dot{width:8px;height:8px;border-radius:50%}
+#node-card .card-title{font-size:14px;font-weight:700;color:#111827;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;padding-right:20px}
+.kv-row{display:flex;gap:8px;margin-bottom:4px;line-height:1.4}
+.kv-key{color:#6b7280;font-size:11.5px;min-width:128px;flex-shrink:0}
+.kv-val{color:#111827;font-size:11.5px;word-break:break-all}
+.card-conns{margin-top:8px;padding-top:6px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;font-style:italic}
+.hidden-hint{color:#9ca3af;font-size:11px;font-style:italic;margin-top:4px}
+.card-close{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;border:none;background:#f3f4f6;color:#6b7280;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center}
+.card-close:hover{background:#e5e7eb;color:#111827}
+
+
+.chat-panel{width:355px;min-width:355px;background:#fff;border-left:1px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0}
+.chat-header{padding:10px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px}
+.chat-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;flex-shrink:0}
+.chat-hinfo h3{font-size:14px;font-weight:700;color:#111827}
+.chat-hinfo p{font-size:11px;color:#6b7280;margin-top:1px}
+.chat-online{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;color:#059669}
+.online-dot{width:7px;height:7px;border-radius:50%;background:#059669;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.api-row{padding:7px 14px;border-bottom:1px solid #f3f4f6;background:#fafafa}
+.api-row label{font-size:10px;color:#9ca3af;display:block;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.api-row input{width:100%;border:1px solid #e5e7eb;background:#fff;color:#111827;padding:6px 10px;border-radius:6px;font-size:12px;outline:none}
+.api-row input:focus{border-color:#6366f1}
+.api-row input::placeholder{color:#d1d5db}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px;background:#fafafa}
+.cmsg{display:flex;gap:8px;align-items:flex-start}
+.cmsg.user{flex-direction:row-reverse}
+.mav{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;flex-shrink:0}
+.mav.uav{background:#e5e7eb;color:#374151}
+.mbubble{max-width:83%;padding:9px 12px;border-radius:10px;font-size:12.5px;line-height:1.55;color:#111827}
+.cmsg.ai .mbubble{background:#fff;border:1px solid #e5e7eb;border-radius:2px 10px 10px 10px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.cmsg.user .mbubble{background:#1d4ed8;color:#fff;border-radius:10px 2px 10px 10px}
+.cmsg.user .mbubble strong{color:#bfdbfe}
+.mbubble strong{font-weight:600}
+.mbubble table{width:100%;border-collapse:collapse;margin-top:7px;font-size:11px}
+.mbubble th{background:#f3f4f6;color:#374151;padding:4px 8px;text-align:left;border-bottom:1px solid #e5e7eb;font-weight:600}
+.mbubble td{padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#6b7280}
+.mbubble code{background:#f3f4f6;padding:1px 5px;border-radius:3px;font-size:11px;font-family:monospace;color:#6d28d9}
+.msg-sys{text-align:center;font-size:11px;color:#9ca3af;padding:2px 0}
+.msg-cypher{background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;margin-top:4px;font-size:11px;font-family:monospace;color:#374151;white-space:pre-wrap;word-break:break-all;display:none}
+.msg-cypher.visible{display:block}
+.cypher-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:8px;font-size:10px;color:#6b7280;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid #e5e7eb;background:#f9fafb;user-select:none}
+.cypher-toggle:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
+.cypher-toggle .arrow{font-size:9px;transition:transform .2s}
+
+.typing-wrap{display:flex;gap:8px;align-items:center}
+.typing-dots{display:flex;gap:3px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:2px 10px 10px 10px}
+.typing-dots span{width:5px;height:5px;border-radius:50%;background:#9ca3af;animation:tdot 1.2s infinite}
+.typing-dots span:nth-child(2){animation-delay:.2s}
+.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes tdot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}
+
+.ex-area{padding:8px 12px;border-top:1px solid #f3f4f6;background:#fff}
+.ex-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid #e5e7eb;background:#fff;color:#374151;cursor:pointer;transition:all .12s}
+.chip:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
+
+.chat-input-area{padding:10px 12px;border-top:1px solid #e5e7eb;background:#fff;display:flex;gap:8px}
+.chat-input-area input{flex:1;border:1px solid #e5e7eb;background:#f9fafb;color:#111827;padding:9px 12px;border-radius:8px;font-size:13px;outline:none}
+.chat-input-area input:focus{border-color:#6366f1;background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.chat-input-area input::placeholder{color:#9ca3af}
+.send-btn{padding:9px 16px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .12s;flex-shrink:0}
+.send-btn:hover{background:#1e40af}
+.send-btn:disabled{opacity:.45;cursor:not-allowed}
+
+.mode-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.mode-badge.neo4j{background:#d1fae5;color:#065f46}
+.mode-badge.local{background:#fef3c7;color:#92400e}
+
+.provider-row{padding:7px 14px;border-bottom:1px solid #f3f4f6;background:#fff;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.provider-label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.provider-btns{display:flex;gap:4px;flex:1}
+.pvdr-btn{flex:1;padding:5px 8px;border-radius:6px;border:1px solid #e5e7eb;background:#f9fafb;color:#374151;cursor:pointer;font-size:11px;font-weight:600;transition:all .12s;text-align:center;position:relative}
+.pvdr-btn:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
+.pvdr-btn.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.pvdr-btn.active-groq{background:#059669;color:#fff;border-color:#059669}
+.pvdr-btn .pvdr-status{display:block;font-size:9px;font-weight:400;opacity:.8;margin-top:1px}
+.pvdr-btn.unconfigured{opacity:.45;cursor:not-allowed}
+.pvdr-btn.unconfigured:hover{border-color:#e5e7eb;color:#374151;background:#f9fafb}
+.pvdr-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;flex-shrink:0}
+.pvdr-badge.groq{background:#d1fae5;color:#065f46}
+.pvdr-badge.fallback{background:#fef3c7;color:#92400e}
+.pvdr-auto{font-size:9px;color:#9ca3af;white-space:nowrap}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-breadcrumb">
+    <span>Mapping</span><span class="sep">/</span><span class="cur">Order to Cash</span>
+  </div>
+  <span id="mode-badge" class="mode-badge local">⚡ Local Mode</span>
+  <div class="topbar-right">
+    <span class="tstat">Nodes: <strong id="stat-nodes">—</strong></span>
+    <span class="tstat">Edges: <strong id="stat-edges">—</strong></span>
+    <button class="ingest-btn" id="ingest-btn" onclick="triggerIngest()">⟳ Ingest to Neo4j</button>
+  </div>
+</div>
+
+<div class="workspace">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-title">Entity Types</div>
+    <div class="ent-list" id="ent-list"></div>
+  </div>
+
+  <!-- GRAPH -->
+  <div class="graph-area" id="graph-area">
+    <svg id="graph-svg"></svg>
+    <div class="gtoolbar">
+      <button class="gtb-btn" id="overlay-btn" onclick="toggleOverlay()">👁 Hide Labels</button>
+      <button class="gtb-btn" onclick="loadNeo4jGraph()" id="neo4j-load-btn" style="display:none">⬇ Load from Neo4j</button>
+    </div>
+    <div class="gctr">
+      <button class="ctrl-btn" onclick="zoomIn()">+</button>
+      <button class="ctrl-btn" onclick="zoomOut()">−</button>
+      <button class="ctrl-btn" onclick="resetView()">⊡</button>
+      <button class="ctrl-btn" onclick="reheat()">⟳</button>
+    </div>
+    <div class="search-wrap">
+      <div class="search-label">Search nodes</div>
+      <input type="text" id="search-input" placeholder="e.g. 90504274, Cardenas…" oninput="searchNodes(this.value)">
+    </div>
+    <div class="glegend">
+      <div class="glegend-title">Legend</div>
+      <div class="lgrid" id="legend-grid"></div>
+    </div>
+
+    <!-- NODE CARD -->
+    <div id="node-card">
+      <button class="card-close" onclick="closeCard()">✕</button>
+      <div class="card-type"><div class="type-dot" id="card-dot"></div><span id="card-type-lbl"></span></div>
+      <div class="card-title" id="card-title"></div>
+      <div id="card-body"></div>
+      <div class="card-conns" id="card-conns"></div>
+      <div id="card-expand-area"></div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-av">AI</div>
+      <div class="chat-hinfo"><h3>Graph Agent</h3><p>Order to Cash</p></div>
+      <div class="chat-online"><div class="online-dot"></div> Online</div>
+    </div>
+    <div class="api-row">
+      <label>Backend URL</label>
+      <input type="text" id="backend-url" value="https://o2c-graph-explorer-s3iu.onrender.com" placeholder="http://localhost:8000">
+    </div>
+
+    <!-- Provider switcher -->
+    <div class="provider-row">
+      <span class="provider-label">LLM</span>
+      <div class="provider-btns">
+        <button class="pvdr-btn active-groq" id="btn-groq" onclick="setProvider('groq')">
+          ⚡ Groq
+          <span class="pvdr-status" id="status-groq">Llama 3.3 70B · Free</span>
+        </button>
+        <button class="pvdr-btn" id="btn-auto" onclick="setProvider('auto')" title="Use Groq with auto-retry on failure">
+          🔄 Auto
+          <span class="pvdr-status">Retry on fail</span>
+        </button>
+      </div>
+    </div>
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="msg-sys">Today</div>
+      <div class="cmsg ai">
+        <div class="mav">AI</div>
+        <div class="mbubble">Hi! I can help you analyze the <strong>Order to Cash</strong> process.<br><br>
+          <strong>Quick start:</strong><br>
+          1️⃣ Start the Python backend: <code>uvicorn app.main:app</code><br>
+          2️⃣ Click <strong>⟳ Ingest to Neo4j</strong> (top right) to load all data<br>
+          3️⃣ Ask me anything about the data<br><br>
+          The graph below shows a preview using embedded data. Once ingested into Neo4j, queries will run against the real graph DB.
+        </div>
+      </div>
+    </div>
+    <div class="ex-area">
+      <div class="ex-label">Quick queries</div>
+      <div class="chips">
+        <button class="chip" onclick="useChip(this)">Top billed products</button>
+        <button class="chip" onclick="useChip(this)">Incomplete order flows</button>
+        <button class="chip" onclick="useChip(this)">Revenue by customer</button>
+        <button class="chip" onclick="useChip(this)">Cancelled billings</button>
+        <button class="chip" onclick="useChip(this)">Delivery status</button>
+        <button class="chip" onclick="useChip(this)">Payment summary</button>
+      </div>
+    </div>
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Analyze anything" onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="send-btn" id="send-btn" onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+const COLORS = {
+  Customer:'#f97316', SalesOrder:'#3b82f6', SalesOrderItem:'#60a5fa',
+  BillingDocument:'#8b5cf6', JournalEntry:'#ec4899', Payment:'#f59e0b',
+  Delivery:'#10b981', Product:'#84cc16', Plant:'#94a3b8',
+  customer:'#f97316', sales_order:'#3b82f6', sales_order_item:'#60a5fa',
+  billing:'#8b5cf6', journal:'#ec4899', payment:'#f59e0b',
+  delivery:'#10b981', product:'#84cc16', plant:'#94a3b8',
+};
+const ENTITY_CFG = [
+  {key:'Customer',        local:'customer',         label:'Customer',       color:COLORS.Customer,        count:STATIC_DB.business_partners.length},
+  {key:'SalesOrder',      local:'sales_order',      label:'Sales Order',    color:COLORS.SalesOrder,      count:STATIC_DB.sales_order_headers.length},
+  {key:'SalesOrderItem',  local:'sales_order_item', label:'SO Item',        color:COLORS.SalesOrderItem,  count:STATIC_DB.sales_order_items.length},
+  {key:'BillingDocument', local:'billing',          label:'Billing Doc',    color:COLORS.BillingDocument, count:STATIC_DB.billing_documents.length},
+  {key:'JournalEntry',    local:'journal',          label:'Journal Entry',  color:COLORS.JournalEntry,    count:STATIC_DB.journal_entries.length},
+  {key:'Payment',         local:'payment',          label:'Payment',        color:COLORS.Payment,         count:STATIC_DB.payments.length},
+  {key:'Delivery',        local:'delivery',         label:'Delivery',       color:COLORS.Delivery,        count:STATIC_DB.outbound_deliveries.length},
+  {key:'Product',         local:'product',          label:'Product',        color:COLORS.Product,         count:STATIC_DB.products.length},
+  {key:'Plant',           local:'plant',            label:'Plant',          color:COLORS.Plant,           count:STATIC_DB.plants.length},
+];
+const RADII = {Customer:18,SalesOrder:13,SalesOrderItem:9,BillingDocument:12,JournalEntry:10,Payment:10,Delivery:11,Product:10,Plant:11};
+function R(t){return RADII[t]||10}
+
+let svg,g,zoom,sim;
+let gNodes=[],gLinks=[],activeFilter=null,showLabels=true,lastNode=null;
+
+function buildLocalGraph(filter){
+  gNodes=[]; gLinks=[];
+  const nm={};
+  const add=(id,type,label,data)=>{if(!nm[id]){const n={id,type,label,data};gNodes.push(n);nm[id]=n;}return nm[id];};
+  const edge=(s,t,rel)=>{if(nm[s]&&nm[t])gLinks.push({source:s,target:t,rel});};
+  const inc=t=>!filter||filter===t||filter===t.toLowerCase();
+
+  if(inc('Customer'))     STATIC_DB.business_partners.forEach(bp=>add('C_'+bp.customer,'Customer',bp.businessPartnerFullName||bp.customer,bp));
+  if(inc('SalesOrder'))   STATIC_DB.sales_order_headers.forEach(so=>{add('SO_'+so.salesOrder,'SalesOrder','SO '+so.salesOrder,so);if(!filter&&nm['C_'+so.soldToParty])edge('SO_'+so.salesOrder,'C_'+so.soldToParty,'PLACED_BY');});
+  if(inc('SalesOrderItem')) STATIC_DB.sales_order_items.forEach(i=>{const id='SOI_'+i.salesOrder+'_'+i.salesOrderItem;add(id,'SalesOrderItem','Item '+i.salesOrderItem,i);if(!filter&&nm['SO_'+i.salesOrder])edge('SO_'+i.salesOrder,id,'HAS_ITEM');});
+  if(inc('Product')){STATIC_DB.products.forEach(p=>add('P_'+p.product,'Product',p.productDescription.slice(0,22),p));if(!filter)STATIC_DB.sales_order_items.forEach(i=>{const id='SOI_'+i.salesOrder+'_'+i.salesOrderItem;if(nm[id]&&nm['P_'+i.material])edge(id,'P_'+i.material,'REFERENCES_PRODUCT');});}
+  if(inc('BillingDocument')){STATIC_DB.billing_documents.forEach(b=>{add('B_'+b.billingDocument,'BillingDocument','Bill '+b.billingDocument,b);if(!filter&&nm['C_'+b.soldToParty])edge('B_'+b.billingDocument,'C_'+b.soldToParty,'BILLED_TO');});}
+  const bam={};STATIC_DB.billing_documents.forEach(b=>{bam[b.accountingDocument]=b.billingDocument;});
+  if(inc('JournalEntry')){const seen=new Set();STATIC_DB.journal_entries.forEach(j=>{const k=j.accountingDocument+'_'+j.accountingDocumentItem;if(seen.has(k))return;seen.add(k);add('JE_'+k,'JournalEntry','Journal '+j.accountingDocument,j);if(!filter&&bam[j.accountingDocument])edge('B_'+bam[j.accountingDocument],'JE_'+k,'POSTS_TO_JOURNAL');});}
+  if(inc('Payment')){const seen=new Set();STATIC_DB.payments.forEach(p=>{const k=p.accountingDocument+'_'+p.accountingDocumentItem;if(seen.has(k))return;seen.add(k);add('PAY_'+k,'Payment','Pay '+p.accountingDocument,p);if(!filter&&bam[p.accountingDocument])edge('B_'+bam[p.accountingDocument],'PAY_'+k,'SETTLED_BY');});}
+  if(inc('Delivery'))   STATIC_DB.outbound_deliveries.slice(0,40).forEach(d=>add('D_'+d.deliveryDocument,'Delivery','Del '+d.deliveryDocument,d));
+  if(inc('Plant')){const used=new Set(STATIC_DB.sales_order_items.map(i=>i.productionPlant).filter(Boolean));STATIC_DB.plants.filter(p=>used.has(p.plant)).forEach(p=>add('PL_'+p.plant,'Plant',p.plantName||p.plant,p));if(!filter)STATIC_DB.sales_order_items.forEach(i=>{const id='SOI_'+i.salesOrder+'_'+i.salesOrderItem;if(i.productionPlant&&nm[id]&&nm['PL_'+i.productionPlant])edge(id,'PL_'+i.productionPlant,'SHIPS_FROM');});}
+
+  document.getElementById('stat-nodes').textContent=gNodes.length;
+  document.getElementById('stat-edges').textContent=gLinks.length;
+}
+
+async function loadNeo4jGraph(){
+  const base=document.getElementById('backend-url').value.trim();
+  try{
+    const resp=await fetch(`${base}/api/graph/data?limit=150`);
+    const data=await resp.json();
+    gNodes=data.nodes.map(n=>({id:n.id,type:n._label,label:n.name||n.description||n.id,data:n}));
+    const nodeSet=new Set(gNodes.map(n=>n.id));
+    gLinks=data.relationships.filter(r=>nodeSet.has(r.source)&&nodeSet.has(r.target)).map(r=>({source:r.source,target:r.target,rel:r.relationship}));
+    document.getElementById('stat-nodes').textContent=gNodes.length;
+    document.getElementById('stat-edges').textContent=gLinks.length;
+    renderGraph();
+    document.getElementById('mode-badge').textContent='🟢 Neo4j Mode';
+    document.getElementById('mode-badge').className='mode-badge neo4j';
+    sysMsg('Graph loaded from Neo4j — '+gNodes.length+' nodes, '+gLinks.length+' edges');
+  }catch(e){
+    sysMsg('⚠️  Could not reach backend. Showing local graph.');
+  }
+}
+
+function renderGraph(){
+  const area=document.getElementById('graph-area');
+  const rect=area.getBoundingClientRect();
+  const W=rect.width||800, H=rect.height||600;
+
+  d3.select('#graph-svg').selectAll('*').remove();
+  svg=d3.select('#graph-svg').attr('width',W).attr('height',H);
+  zoom=d3.zoom().scaleExtent([.04,6]).on('zoom',e=>g.attr('transform',e.transform));
+  svg.call(zoom);
+  g=svg.append('g');
+
+  sim=d3.forceSimulation(gNodes)
+    .force('link',d3.forceLink(gLinks).id(d=>d.id).distance(d=>{const t=typeof d.source==='object'?d.source.type:d.source;return t==='Customer'?110:t==='Product'?55:75;}).strength(.45))
+    .force('charge',d3.forceManyBody().strength(-200))
+    .force('center',d3.forceCenter(W/2,H/2))
+    .force('collision',d3.forceCollide(d=>R(d.type)+10));
+
+  const link=g.append('g').selectAll('line').data(gLinks).join('line')
+    .attr('stroke',d=>{const t=typeof d.source==='object'?d.source.type:d.source;return (COLORS[t]||'#d1d5db')+'66';})
+    .attr('stroke-width',1).attr('stroke-opacity',showLabels?.55:.12);
+
+  const node=g.append('g').selectAll('g').data(gNodes).join('g')
+    .attr('class','node-g').style('cursor','pointer')
+    .call(d3.drag()
+      .on('start',(e,d)=>{if(!e.active)sim.alphaTarget(.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}))
+    .on('click',(e,d)=>{e.stopPropagation();openCard(d,e);});
+
+  node.append('circle').attr('r',d=>R(d.type))
+    .attr('fill',d=>COLORS[d.type]||'#94a3b8').attr('fill-opacity',.85)
+    .attr('stroke',d=>COLORS[d.type]||'#94a3b8').attr('stroke-width',2).attr('stroke-opacity',.4);
+
+  node.append('text').attr('class','nlbl')
+    .text(d=>showLabels?d.label.slice(0,14):'')
+    .attr('dy',d=>R(d.type)+11).attr('text-anchor','middle')
+    .attr('font-size','8.5px').attr('fill','#6b7280').attr('pointer-events','none');
+
+  svg.on('click',()=>closeCard());
+  sim.on('tick',()=>{
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('transform',d=>`translate(${d.x},${d.y})`);
+  });
+}
+
+function toggleOverlay(){
+  showLabels=!showLabels;
+  document.getElementById('overlay-btn').textContent=(showLabels?'👁 Hide ':'👁 Show ')+'Labels';
+  d3.selectAll('.nlbl').text(d=>showLabels?d.label.slice(0,14):'');
+  d3.selectAll('line').attr('stroke-opacity',showLabels?.55:.12);
+}
+function searchNodes(q){
+  if(!q){d3.selectAll('.node-g circle').attr('opacity',1);return;}
+  const ql=q.toLowerCase();
+  d3.selectAll('.node-g').each(function(d){const m=d.label.toLowerCase().includes(ql)||JSON.stringify(d.data).toLowerCase().includes(ql);d3.select(this).select('circle').attr('opacity',m?1:.08);});
+}
+function zoomIn(){svg.transition().duration(300).call(zoom.scaleBy,1.5);}
+function zoomOut(){svg.transition().duration(300).call(zoom.scaleBy,.67);}
+function resetView(){svg.transition().duration(500).call(zoom.transform,d3.zoomIdentity);}
+function reheat(){if(sim)sim.alpha(.6).restart();}
+
+function openCard(d, event) {
+  lastNode = d;
+  const color = COLORS[d.type] || '#94a3b8';
+  const typeLabel = d.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  document.getElementById('card-dot').style.background = color;
+  document.getElementById('card-type-lbl').textContent = 'Entity: ' + typeLabel;
+  document.getElementById('card-title').textContent = d.label;
+
+  const SKIP = new Set(['creationTime', 'actualGoodsMovementTime', '_label']);
+  let html = '', shown = 0, hidden = 0;
+  for (const [k, v] of Object.entries(d.data)) {
+    if (SKIP.has(k) || v === null || v === '' || v === undefined) continue;
+    const vs = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (shown < 12) {
+      html += `<div class="kv-row"><span class="kv-key">${k}:</span><span class="kv-val">${vs.length > 44 ? vs.slice(0, 44) + '…' : vs}</span></div>`;
+      shown++;
+    } else hidden++;
+  }
+  if (hidden) html += `<div class="hidden-hint">+${hidden} more fields hidden</div>`;
+  document.getElementById('card-body').innerHTML = html;
+
+  const connCount = gLinks.filter(l =>
+    (typeof l.source === 'object' ? l.source.id : l.source) === d.id ||
+    (typeof l.target === 'object' ? l.target.id : l.target) === d.id
+  ).length;
+  document.getElementById('card-conns').textContent = 'Connections: ' + connCount;
+
+  const expandArea = document.getElementById('card-expand-area');
+  if (expandArea && !document.getElementById('expand-btn-' + d.id)) {
+    expandArea.innerHTML = `
+      <button
+        id="expand-btn-${d.id}"
+        onclick="expandNode('${d.id}')"
+        style="margin-top:10px;width:100%;padding:6px 0;border:1px solid #e5e7eb;
+               border-radius:6px;background:#f9fafb;color:#374151;font-size:11.5px;
+               font-weight:600;cursor:pointer;display:flex;align-items:center;
+               justify-content:center;gap:5px;transition:all .12s;"
+        onmouseover="this.style.borderColor='#6366f1';this.style.color='#6366f1';this.style.background='#eef2ff'"
+        onmouseout="this.style.borderColor='#e5e7eb';this.style.color='#374151';this.style.background='#f9fafb'"
+      >
+        <span style="font-size:13px">⊕</span> Expand neighbours
+      </button>`;
+  }
+
+  const area = document.getElementById('graph-area');
+  const areaRect = area.getBoundingClientRect();
+  const CARD_W = 310, CARD_H = 460;
+  let cx = event.clientX - areaRect.left + 16;
+  let cy = event.clientY - areaRect.top - 20;
+  if (cx + CARD_W > areaRect.width - 10)  cx = areaRect.width - CARD_W - 10;
+  if (cx < 10) cx = 10;
+  if (cy < 50)  cy = 50;
+  if (cy + CARD_H > areaRect.height - 10) cy = areaRect.height - CARD_H - 10;
+
+  const card = document.getElementById('node-card');
+  card.style.left = cx + 'px';
+  card.style.top  = cy + 'px';
+  card.style.display = 'block';
+
+  d3.selectAll('.node-g circle').attr('stroke-width', 2).attr('stroke-opacity', .4);
+  d3.selectAll('.node-g').filter(n => n.id === d.id)
+    .select('circle').attr('stroke-width', 3.5).attr('stroke-opacity', 1);
+}
+
+async function expandNode(nodeId) {
+  const btn = document.getElementById('expand-btn-' + nodeId);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span style="font-size:13px">⏳</span> Loading…'; }
+
+  const base = document.getElementById('backend-url').value.trim();
+  try {
+    const resp = await fetch(`${base}/api/graph/node/${encodeURIComponent(nodeId)}`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+
+    const existingIds = new Set(gNodes.map(n => n.id));
+    let added = 0;
+
+    (data.neighbours || []).forEach(nb => {
+      if (!nb.id || existingIds.has(nb.id)) return;
+      gNodes.push({ id: nb.id, type: nb.label || 'Unknown', label: nb.id, data: nb });
+      existingIds.add(nb.id);
+      added++;
+      if (nb.dir === 'out') {
+        gLinks.push({ source: nodeId, target: nb.id, rel: nb.rel });
+      } else {
+        gLinks.push({ source: nb.id, target: nodeId, rel: nb.rel });
+      }
+    });
+
+    document.getElementById('stat-nodes').textContent = gNodes.length;
+    document.getElementById('stat-edges').textContent = gLinks.length;
+
+    if (added > 0) {
+      renderGraph();
+      sysMsg(`Expanded ${added} new neighbour${added > 1 ? 's' : ''} from ${nodeId}`);
+    } else {
+      sysMsg(`No new neighbours found for ${nodeId}`);
+    }
+
+    if (btn) {
+      if (added > 0) {
+        btn.innerHTML = `<span style="font-size:13px">✓</span> ${added} neighbour${added > 1 ? 's' : ''} added`;
+        btn.style.borderColor = '#6ee7b7'; btn.style.color = '#065f46'; btn.style.background = '#d1fae5';
+      } else {
+        btn.innerHTML = '<span style="font-size:13px">—</span> All neighbours visible';
+        btn.style.color = '#9ca3af';
+      }
+      btn.disabled = true;
+    }
+  } catch (err) {
+    console.error('expandNode error:', err);
+    sysMsg('⚠️  Could not expand node — is the backend running?');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span style="font-size:13px">⊕</span> Expand neighbours'; }
+  }
+}
+
+function closeCard() {
+  document.getElementById('node-card').style.display = 'none';
+  document.getElementById('card-expand-area').innerHTML = '';
+  lastNode = null;
+  d3.selectAll('.node-g circle').attr('stroke-width', 2).attr('stroke-opacity', .4);
+}
+
+function renderSidebar(){
+  const el=document.getElementById('ent-list');
+  if(!el){console.error('ent-list element not found');return;}
+  el.innerHTML=
+    ENTITY_CFG.map(e=>`<button class="ent-btn ${activeFilter===e.key?'active':''}" onclick="filterBy('${e.key}')">
+      <div class="ent-dot" style="background:${e.color}"></div>
+      <span>${e.label}</span>
+      <span class="ent-count">${e.count}</span>
+    </button>`).join('')+
+    `<div class="sdivider"></div>
+     <button class="ent-btn ${!activeFilter?'active':''}" style="color:#6b7280;font-style:italic;font-size:12px" onclick="filterBy(null)">
+       Show all
+     </button>`;
+}
+function renderLegend(){
+  document.getElementById('legend-grid').innerHTML=ENTITY_CFG.map(e=>`<div class="litem"><div class="ldot" style="background:${e.color}"></div><span>${e.label}</span></div>`).join('');
+}
+function filterBy(type){activeFilter=type;buildLocalGraph(type);renderGraph();renderSidebar();closeCard();}
+
+async function triggerIngest(){
+  const base=document.getElementById('backend-url').value.trim();
+  const btn=document.getElementById('ingest-btn');
+  btn.disabled=true;btn.textContent='⏳ Ingesting…';
+  appendAI('Ingesting all data into Neo4j… this takes ~10–15 seconds.');
+  try{
+    const resp=await fetch(`${base}/api/data/ingest`,{method:'POST'});
+    const data=await resp.json();
+    appendAI(`✅ Ingestion complete!\n\n**Nodes created:**\n${Object.entries(data.nodes_created||{}).map(([k,v])=>`- ${k}: ${v}`).join('\n')}\n\n**Relationships:** ${data.relationships_created}\n\nClick **⬇ Load from Neo4j** to update the graph view.`);
+    document.getElementById('neo4j-load-btn').style.display='flex';
+    document.getElementById('mode-badge').textContent='🟢 Neo4j Ready';
+    document.getElementById('mode-badge').className='mode-badge neo4j';
+  }catch(e){
+    appendAI('❌ Could not reach backend at '+base+'\n\nMake sure `uvicorn app.main:app --reload` is running and your .env has the Neo4j credentials.');
+  }
+  btn.disabled=false;btn.textContent='⟳ Ingest to Neo4j';
+}
+
+let currentProvider = 'groq';
+
+function setProvider(p) {
+  currentProvider = p;
+  ['groq','auto'].forEach(id => {
+    const btn = document.getElementById('btn-'+id);
+    if(!btn) return;
+    btn.className = 'pvdr-btn' + (id === p ? ' active-groq' : '');
+  });
+  sysMsg('Switched to ' + ({groq:'⚡ Groq (Llama 3.3)', auto:'🔄 Auto-retry'}[p] || p));
+}
+
+async function loadProviderStatus() {
+  const base = document.getElementById('backend-url').value.trim();
+  try {
+    const resp = await fetch(`${base}/api/query/provider`);
+    const data = await resp.json();
+    if (!data.groq?.configured) {
+      document.getElementById('btn-groq').classList.add('unconfigured');
+      document.getElementById('status-groq').textContent = 'No key — get free key at console.groq.com';
+    }
+  } catch(e) {}
+}
+
+let chatHistory=[];
+
+async function sendMsg(){
+  const input=document.getElementById('chat-input');
+  const base=document.getElementById('backend-url').value.trim();
+  const msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  appendUser(msg);
+  const tid=appendTyping();
+  document.getElementById('send-btn').disabled=true;
+
+  const providerParam = currentProvider === 'auto' ? null : currentProvider;
+
+  try{
+    const resp=await fetch(`${base}/api/query/natural`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:msg, provider: providerParam, session_id:'web'})
+    });
+    const data=await resp.json();
+    removeTyping(tid);
+
+    let content = data.answer;
+
+    if(data.cypher && !data.is_off_topic){
+      const cid = 'cypher-' + Date.now();
+      content += `<div style="margin-top:8px">
+        <span class="cypher-toggle" onclick="toggleCypher('${cid}',this)">
+          <span class="arrow">▶</span> Show Cypher query
+        </span>
+        <div class="msg-cypher" id="${cid}">${escHtml(data.cypher)}</div>
+      </div>`;
+    }
+
+    if(data.provider_used && data.provider_used !== 'none'){
+      content += `<div style="margin-top:8px"><span class="pvdr-badge groq">⚡ Groq</span></div>`;
+    }
+
+    appendAIRaw(content);
+
+    if(data.results && data.results.length > 0){
+      const ids=[];
+      data.results.forEach(r=>Object.values(r).forEach(v=>{if(typeof v==='string'&&v.length>4)ids.push(v);}));
+      highlightIds(ids);
+    }
+  }catch(e){
+    removeTyping(tid);
+    appendAI(' Cannot reach backend at '+base+'\n\nCheck that your Render service is running.');
+  }
+  document.getElementById('send-btn').disabled=false;
+}
+
+function toggleCypher(id, btn){
+  const el = document.getElementById(id);
+  const arrow = btn.querySelector('.arrow');
+  const isVisible = el.classList.contains('visible');
+  if(isVisible){
+    el.classList.remove('visible');
+    arrow.textContent = '▶';
+    btn.childNodes[1].textContent = ' Show Cypher query';
+  } else {
+    el.classList.add('visible');
+    arrow.textContent = '▼';
+    btn.childNodes[1].textContent = ' Hide Cypher query';
+  }
+}
+
+function highlightIds(ids){
+  const idSet=new Set(ids);
+  d3.selectAll('.node-g').each(function(d){
+    const matched=idSet.has(d.id)||idSet.has(d.data?.id)||idSet.has(d.data?.salesOrder)||idSet.has(d.data?.billingDocument);
+    if(matched)d3.select(this).select('circle').attr('stroke-width',3.5).attr('stroke-opacity',1).attr('stroke','#f59e0b');
+  });
+  setTimeout(()=>d3.selectAll('.node-g circle').attr('stroke',d=>COLORS[d.type]||'#94a3b8').attr('stroke-width',2).attr('stroke-opacity',.4),4000);
+}
+
+function useChip(btn){document.getElementById('chat-input').value=btn.textContent;sendMsg();}
+
+function appendUser(text){
+  const el=document.getElementById('chat-msgs');
+  const w=document.createElement('div');w.className='cmsg user';
+  const av=document.createElement('div');av.className='mav uav';av.textContent='You';
+  const b=document.createElement('div');b.className='mbubble';b.innerHTML=fmtText(text);
+  w.appendChild(b);w.appendChild(av);el.appendChild(w);el.scrollTop=el.scrollHeight;
+}
+function appendAI(text){
+  const el=document.getElementById('chat-msgs');
+  const w=document.createElement('div');w.className='cmsg ai';
+  const av=document.createElement('div');av.className='mav';av.textContent='AI';
+  const b=document.createElement('div');b.className='mbubble';b.innerHTML=fmtText(text);
+  w.appendChild(av);w.appendChild(b);el.appendChild(w);el.scrollTop=el.scrollHeight;
+}
+function appendAIRaw(html){
+  const el=document.getElementById('chat-msgs');
+  const w=document.createElement('div');w.className='cmsg ai';
+  const av=document.createElement('div');av.className='mav';av.textContent='AI';
+  const b=document.createElement('div');b.className='mbubble';b.innerHTML=fmtText(html);
+  w.appendChild(av);w.appendChild(b);el.appendChild(w);el.scrollTop=el.scrollHeight;
+}
+function sysMsg(text){
+  const el=document.getElementById('chat-msgs');
+  const d=document.createElement('div');d.className='msg-sys';d.textContent=text;
+  el.appendChild(d);el.scrollTop=el.scrollHeight;
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function fmtText(t){
+  if(!t)return '';
+  return t
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/^#{1,3} (.+)$/gm,'<div style="font-weight:700;margin:8px 0 3px">$1</div>')
+    .replace(/((?:^\|.+\|\n?)+)/gm,block=>{
+      const rows=block.trim().split('\n').filter(r=>!/^\|[-:| ]+\|$/.test(r.trim()));
+      if(!rows.length)return block;
+      const parse=row=>row.split('|').slice(1,-1).map(c=>c.trim());
+      const[head,...body]=rows;
+      return `<table><thead><tr>${parse(head).map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${body.map(r=>'<tr>'+parse(r).map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')}</tbody></table>`;
+    })
+    .replace(/^- (.+)$/gm,'<div style="padding:1px 0 1px 10px">• $1</div>')
+    .replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+}
+
+let tc=0;
+function appendTyping(){const id=++tc,el=document.getElementById('chat-msgs'),w=document.createElement('div');w.className='cmsg ai';w.id='ty-'+id;const av=document.createElement('div');av.className='mav';av.textContent='AI';const d=document.createElement('div');d.className='typing-dots';d.innerHTML='<span></span><span></span><span></span>';w.appendChild(av);w.appendChild(d);el.appendChild(w);el.scrollTop=el.scrollHeight;return id;}
+function removeTyping(id){const e=document.getElementById('ty-'+id);if(e)e.remove();}
+
+window.addEventListener('load',()=>{
+  if(typeof STATIC_DB === 'undefined'){
+    document.getElementById('ent-list').innerHTML=
+      '<div style="padding:16px;font-size:12px;color:#ef4444">⚠️ data.js not loaded.<br>Start the server with<br><code>uvicorn app.main:app</code></div>';
+    console.error('STATIC_DB is not defined — data.js failed to load');
+    return;
+  }
+  renderSidebar();
+  renderLegend();
+  requestAnimationFrame(()=>{
+    buildLocalGraph();
+    renderGraph();
+  });
+  loadProviderStatus();
+});
+
+window.addEventListener('resize',()=>{
+  buildLocalGraph(activeFilter);
+  renderGraph();
+});
+</script>
+</body>
+</html>
